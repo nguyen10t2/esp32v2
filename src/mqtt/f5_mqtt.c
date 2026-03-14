@@ -3,7 +3,7 @@
 #include "mqtt_filter.h"
 #include "mqtt_json.h"
 #include "mqtt_network.h"
-#include "mqtt_time.h"
+#include "time_manager/esp_time.h"
 #include <stddef.h>
 
 #include "esp_attr.h"
@@ -61,8 +61,7 @@ void f5_mqtt_init(void) {
         ror_init(&myRoR, DEFAULT_ROR_THRESHOLD); // Khởi tạo thuật toán RoR
     }
 
-    //Khởi tạo mạng & Đồng hồ
-    mqtt_time_init();
+    //Khởi tạo mạng
     mqtt_network_init();
 }
 
@@ -98,7 +97,7 @@ bool f5_mqtt_update(float raw_temp, float raw_smoke, bool raw_flame, uint8_t bat
         .flame = is_fire_real,         // Sửa: Đổi từ .fire sang .flame
         .battery = battery,
         .status = current_status,
-        .timestamp = mqtt_time_get_timestamp()
+        .timestamp = esp_time_get_timestamp()
     };
 
     bool is_sent = false;

@@ -7,6 +7,7 @@
 #include "freertos/queue.h"
 
 #include "wifi_manager/wifi_manager.h"
+#include "time_manager/esp_time.h"
 #include "sensor/mq.h"
 #include "sensor/flame.h"
 #include "sensor/ds18b20.h"
@@ -102,6 +103,13 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     ESP_LOGI(TAG, "WiFi connected! Starting MQTT and sensors...");
+
+    init_sntp();
+    set_time_zone();
+    while (!wait_for_time_sync()) {
+        ESP_LOGW(TAG, "Time sync failed, retrying...");
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
 
     // Mạng có rồi mới được gọi f5_mqtt_init
     f5_mqtt_init();
