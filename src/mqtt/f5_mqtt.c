@@ -97,7 +97,7 @@ bool f5_mqtt_update(float raw_temp, float raw_smoke, bool raw_flame, uint8_t bat
         .flame = is_fire_real,         // Sửa: Đổi từ .fire sang .flame
         .battery = battery,
         .status = current_status,
-        .timestamp = esp_time_get_timestamp()
+        .timestamp = esp_time_get_timestamp() * 1000 // Chuyển sang miligiây
     };
 
     bool is_sent = false;

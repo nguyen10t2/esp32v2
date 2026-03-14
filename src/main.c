@@ -13,8 +13,7 @@
 #include "sensor/ds18b20.h"
 #include "mqtt/f5_mqtt.h"
 #include "lcd/tft.h"
-// #include "mqtt/f5_mqtt.h" // TODO: Include MQTT header
-// #include "led_matrix.h"   // TODO: Include LED header
+// #include "led_matrix.h"   // TODO: Thêm thư viện LED
 
 static const char *TAG = "FIRE_NODE";
 
@@ -27,6 +26,16 @@ typedef struct {
 
 // Hàng đợi truyền dữ liệu giữa các Task
 QueueHandle_t sensorQueue;
+QueueHandle_t ledQueue;
+
+// Interface cập nhật thông điệp cho LED/LCD Task (Gọi từ mạng)
+void update_led_direction(uint8_t dir) {
+    if (ledQueue != NULL) {
+        direction_t d = (direction_t)dir;
+        // Đẩy vào queue để task LCD nhận (không đợi nếu queue đầy)
+        xQueueSend(ledQueue, &d, 0); 
+    }
+}
 
 // 1. Task Đọc Cảm Biến (Chạy độc lập)
 void task_read_sensors(void *pvParameters) {
@@ -46,7 +55,7 @@ void task_read_sensors(void *pvParameters) {
             xQueueSend(sensorQueue, &data, portMAX_DELAY); 
         }
 
-        // Tần suất lấy mẫu và gửi (1.5 - 2s/lần)
+        // Tần suất lấy mẫu và gửi (Hạ xuống còn 5s để tránh Server cảnh báo DEAD nhưng vẫn đạt chuẩn an toàn)
         vTaskDelay(pdMS_TO_TICKS(2000));
     }
 }
@@ -75,21 +84,24 @@ void task_mqtt_process(void *pvParameters) {
     }
 }
 
-// 3. Task LED Matrix 8x8 (Cập nhật cực nhanh, chớp nháy mượt mà)
+// 3. Task LED Matrix 8x8 / LCD (Tối ưu tiết kiệm pin triệt để)
 void task_led_matrix(void *pvParameters) {
-    tft_fill_screen(TFT_COLOR_BLACK);
-    tft_draw_string(10, 10, "FIRE NODE: ONLINE", TFT_COLOR_GREEN);
+    direction_t current_dir = DIR_OFF;
     
-    int frame_cnt = 0;
-    char buf[32];
+    // Vừa vào task, cho LCD ngủ đông ngay lập tức để tiết kiệm điện
+    tft_display_direction(DIR_OFF);
 
     while(1) {
-        // Cập nhật số đếm liên tục lên màn hình
-        snprintf(buf, sizeof(buf), "Frames: %d  ", frame_cnt++);
-        tft_draw_string(10, 40, buf, TFT_COLOR_WHITE);
-        
-        // Render 20fps -> độ trễ 50ms, không bị giật
-        vTaskDelay(pdMS_TO_TICKS(50));
+        direction_t new_dir;
+        // Dùng portMAX_DELAY: Task sẽ NGỦ KỸ TRONG OS (0% CPU) tới khi có lệnh từ MQTT
+        if (xQueueReceive(ledQueue, &new_dir, portMAX_DELAY)) {
+            if (new_dir != current_dir) {
+                // Chỉ đánh thức/cập nhật LCD khi hướng thực sự thay đổi
+                tft_display_direction(new_dir);
+                current_dir = new_dir;
+                ESP_LOGI(TAG, "LCD/LED Updated DIR: %d", new_dir);
+            }
+        }
     }
 }
 
@@ -106,16 +118,16 @@ void app_main(void)
     wifi_manager_start();
 
     // Chờ cho đến khi thực sự có WiFi mới chạy phần còn lại (MQTT, báo cáo dữ liệu...)
-    ESP_LOGI(TAG, "Waiting for WiFi connection...");
+    ESP_LOGI(TAG, "Đang chờ kết nối WiFi...");
     while(!wifi_manager_is_connected()) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    ESP_LOGI(TAG, "WiFi connected! Starting MQTT and sensors...");
+    ESP_LOGI(TAG, "Đã kết nối WiFi! Bắt đầu khởi động MQTT và cảm biến...");
 
     init_sntp();
     set_time_zone();
     while (!wait_for_time_sync()) {
-        ESP_LOGW(TAG, "Time sync failed, retrying...");
+        ESP_LOGW(TAG, "Đồng bộ thời gian thất bại, đang thử lại...");
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
@@ -133,15 +145,16 @@ void app_main(void)
         ESP_LOGE(TAG, "TFT 2.2\" khởi tạo THẤT BẠI");
     }
 
-    // Khởi tạo Queue với kích thước 10 packet
+    // Khởi tạo Queue
     sensorQueue = xQueueCreate(10, sizeof(SensorData_t));
+    ledQueue = xQueueCreate(5, sizeof(direction_t));
 
     // Phân nhỏ luồng bằng FreeRTOS
     xTaskCreate(task_led_matrix, "led_task", 2048, NULL, 5, NULL);     
     xTaskCreate(task_mqtt_process, "mqtt_task", 4096, NULL, 4, NULL);   
     xTaskCreate(task_read_sensors, "sensor_task", 4096, NULL, 3, NULL); 
 
-    ESP_LOGI(TAG, "System started asynchronously!");
+    ESP_LOGI(TAG, "Hệ thống bắt đầu chạy đa luồng!");
 
     // GIỮ LUỒNG CHÍNH KHÔNG TRÔI (Tránh ESP32 kết thúc app_main hoặc bị Watchdog Reset)
     while (1) {

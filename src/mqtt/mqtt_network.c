@@ -5,8 +5,8 @@
 #include <stdio.h>
 #include <string.h> 
 #include "cJSON.h"
-#include "buzzer.h"
-#include "led_matrix.h"
+
+extern void update_led_direction(uint8_t dir);
 
 static const char *TAG = "F5_NETWORK";
 
@@ -19,11 +19,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     
     switch ((esp_mqtt_event_id_t)event_id) {
         case MQTT_EVENT_CONNECTED:
-            ESP_LOGI(TAG, "Ket noi thanh cong: %s", MQTT_BROKER);
+            ESP_LOGI(TAG, "Kết nối thành công: %s", MQTT_BROKER);
             is_connected = true;
             
             //Tự động đăng ký lắng nghe lệnh từ Server khi vừa kết nối xong
-            esp_mqtt_client_subscribe(client, TOPIC_SUBSCRIBE, 0);
+            // Topic nhận lệnh từ Backend Rust có định dạng: esp32/cmd/<node_id>
+            esp_mqtt_client_subscribe(client, "esp32/cmd/+", 0);
             break;
             
         case MQTT_EVENT_DISCONNECTED:
@@ -49,23 +50,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             cJSON *root = cJSON_Parse(json_str);
             if (root != NULL) {
                 
-                // --- XỬ LÝ LỆNH 1: CÒI HÚ (buzzer) ---
-                cJSON *buzzer_item = cJSON_GetObjectItem(root, "buzzer");
-                if (cJSON_IsBool(buzzer_item)) {
-                    bool buzzer_state = cJSON_IsTrue(buzzer_item);
-                    ESP_LOGW(TAG, "=> LỆNH XUỐNG: CÒI HÚ = %s", buzzer_state ? "BAT" : "TAT");
-                    
-                    // Gọi hàm thực thi phần cứng Còi
-                    buzzer_set_state(buzzer_state); 
-                }
-
-                // --- XỬ LÝ LỆNH 2: HƯỚNG SƠ TÁN (dir) ---
+                // --- XỬ LÝ LỆNH: HƯỚNG SƠ TÁN (dir) ---
                 cJSON *dir_item = cJSON_GetObjectItem(root, "dir");
-                if (cJSON_IsString(dir_item) && (dir_item->valuestring != NULL)) {
-                    ESP_LOGW(TAG, "=> LỆNH XUỐNG: LED MATRIX = HƯỚNG %s", dir_item->valuestring);
+                if (cJSON_IsNumber(dir_item)) {
+                    int dir_value = dir_item->valueint;
+                    ESP_LOGW(TAG, "=> LỆNH XUỐNG: LED MATRIX = HƯỚNG (ID: %d)", dir_value);
                     
-                    // Gọi hàm thực thi phần cứng LED
-                    led_matrix_draw_direction(dir_item->valuestring);
+                    // Cập nhật lên hàng đợi Queue cho task LED/LCD xử lý
+                    update_led_direction((uint8_t)dir_value);
                 }
 
                 // Xóa object JSON sau khi dùng xong để tránh tràn RAM
