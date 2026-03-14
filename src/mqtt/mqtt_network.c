@@ -6,7 +6,8 @@
 #include <string.h> 
 #include "cJSON.h"
 
-extern void update_led_direction(uint8_t dir);
+// Hàm trung gian đẩy data sang Task điều khiển màn hình (viết ở main.c)
+extern void update_lcd_direction(uint8_t dir); 
 
 static const char *TAG = "F5_NETWORK";
 
@@ -19,11 +20,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     
     switch ((esp_mqtt_event_id_t)event_id) {
         case MQTT_EVENT_CONNECTED:
-            ESP_LOGI(TAG, "Kết nối thành công: %s", MQTT_BROKER);
+            ESP_LOGI(TAG, "Ket noi thanh cong den Broker: %s", MQTT_BROKER);
             is_connected = true;
             
-            //Tự động đăng ký lắng nghe lệnh từ Server khi vừa kết nối xong
-            // Topic nhận lệnh từ Backend Rust có định dạng: esp32/cmd/<node_id>
+            // Đăng ký lắng nghe lệnh từ Server cho TẤT CẢ các node (dùng Wildcard +)
             esp_mqtt_client_subscribe(client, "esp32/cmd/+", 0);
             break;
             
@@ -32,41 +32,42 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             is_connected = false;
             break;
             
-        // ĐÃ GỘP THÀNH 1 CASE DUY NHẤT
         case MQTT_EVENT_DATA:
-            ESP_LOGI(TAG, "Nhan lenh tu Server o Topic: %.*s", event->topic_len, event->topic);
-            ESP_LOGI(TAG, "Noi dung lenh: %.*s", event->data_len, event->data);
+            ESP_LOGI(TAG, "=> Nhan lenh tu Topic: %.*s", event->topic_len, event->topic);
 
-            // 1. Copy payload nhận được ra một chuỗi string chuẩn C (có ký tự '\0' ở cuối)
+            // 1. Copy payload nhận được ra một chuỗi string chuẩn C
             char *json_str = malloc(event->data_len + 1);
             if (json_str == NULL) {
-                ESP_LOGE(TAG, "Loi cap phat bo nho RAM");
+                ESP_LOGE(TAG, "Loi: Khong du RAM de xu ly JSON!");
                 break;
             }
             memcpy(json_str, event->data, event->data_len);
             json_str[event->data_len] = '\0';
 
-            // 2. Dùng cJSON mổ xẻ cái chuỗi vừa nhận
+            // 2. Mổ xẻ JSON
             cJSON *root = cJSON_Parse(json_str);
             if (root != NULL) {
                 
                 // --- XỬ LÝ LỆNH: HƯỚNG SƠ TÁN (dir) ---
                 cJSON *dir_item = cJSON_GetObjectItem(root, "dir");
+                
+                // Kiểm tra xem backend có gửi đúng định dạng số (0-4) không
                 if (cJSON_IsNumber(dir_item)) {
                     int dir_value = dir_item->valueint;
-                    ESP_LOGW(TAG, "=> LỆNH XUỐNG: LED MATRIX = HƯỚNG (ID: %d)", dir_value);
+                    ESP_LOGW(TAG, "-> LENH XUONG: TFT LCD = HUONG (ID: %d)", dir_value);
                     
-                    // Cập nhật lên hàng đợi Queue cho task LED/LCD xử lý
-                    update_led_direction((uint8_t)dir_value);
+                    // Bắn tín hiệu sang cho Task màn hình xử lý
+                    update_lcd_direction((uint8_t)dir_value);
+                } else {
+                    ESP_LOGE(TAG, "Loi: Truong 'dir' khong phai la so nguyen!");
                 }
 
-                // Xóa object JSON sau khi dùng xong để tránh tràn RAM
+                // Dọn dẹp RAM
                 cJSON_Delete(root); 
             } else {
-                ESP_LOGE(TAG, "Lỗi: Payload tải xuống không phải là JSON hợp lệ!");
+                ESP_LOGE(TAG, "Loi: Payload khong dung chuan JSON!");
             }
             
-            // Xóa chuỗi string mượn tạm lúc nãy
             free(json_str); 
             break;
             
@@ -80,22 +81,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 }
 
 void mqtt_network_init(void) {
-    //Tạo chuỗi địa chỉ chuẩn: mqtt://f5.soict.io:1883
     char broker_uri[64];
     snprintf(broker_uri, sizeof(broker_uri), "mqtt://%s:%d", MQTT_BROKER, MQTT_PORT);
 
-    //Cấu hình Client
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = broker_uri,
     };
 
-    //Khởi tạo đối tượng
     client = esp_mqtt_client_init(&mqtt_cfg);
-    
-    //Đăng ký cái hàm xử lý sự kiện ở trên vào hệ thống
     esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
-    
-    //Bấm nút Start (Từ đây nó tự lo mọi việc)
     esp_mqtt_client_start(client);
 }
 
@@ -105,10 +99,9 @@ bool mqtt_network_is_connected(void) {
 
 void mqtt_network_publish(const char *topic, const char *payload) {
     if (is_connected && client != NULL) {
-        //Tham số: client, topic, data, len(0 = tự động đếm), qos(1 = đảm bảo gửi), retain(0)
         int msg_id = esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
-        ESP_LOGI(TAG, "Ban JSON len thanh cong %s (msg_id=%d)", topic, msg_id);
+        ESP_LOGI(TAG, "Ban JSON len thanh cong -> Topic: %s", topic);
     } else {
-        ESP_LOGE(TAG, "Chua co ket noi MQTT, khong the gui data!");
+        ESP_LOGE(TAG, "Chua co ket noi MQTT, dua vao hang doi Offline...");
     }
 }

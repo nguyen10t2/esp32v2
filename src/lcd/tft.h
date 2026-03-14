@@ -10,7 +10,7 @@ extern "C"
 #include <stdbool.h>
 #include "esp_err.h"
 
-// Các màu cơ bản
+//Các màu cơ bản
 #define TFT_COLOR_BLACK 0x0000
 #define TFT_COLOR_WHITE 0xFFFF
 #define TFT_COLOR_RED 0xF800

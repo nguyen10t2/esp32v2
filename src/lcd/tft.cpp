@@ -29,7 +29,7 @@ public:
             cfg.use_lock   = true;
             cfg.dma_channel = SPI_DMA_CH_AUTO; 
             
-            // Cấu hình chân mặc định cho ESP32 DOIT DevKit V1
+            //Cấu hình chân mặc định cho ESP32 DOIT DevKit V1
             cfg.pin_sclk = 18;
             cfg.pin_mosi = 23;
             cfg.pin_miso = 19;

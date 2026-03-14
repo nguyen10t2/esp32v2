@@ -13,7 +13,6 @@
 #include "sensor/ds18b20.h"
 #include "mqtt/f5_mqtt.h"
 #include "lcd/tft.h"
-// #include "led_matrix.h"   // TODO: Thêm thư viện LED
 
 static const char *TAG = "FIRE_NODE";
 
@@ -26,14 +25,15 @@ typedef struct {
 
 // Hàng đợi truyền dữ liệu giữa các Task
 QueueHandle_t sensorQueue;
-QueueHandle_t ledQueue;
+QueueHandle_t lcdQueue; // ĐỔI TÊN: ledQueue -> lcdQueue
 
-// Interface cập nhật thông điệp cho LED/LCD Task (Gọi từ mạng)
-void update_led_direction(uint8_t dir) {
-    if (ledQueue != NULL) {
+// Interface cập nhật thông điệp cho LCD Task (Gọi từ mạng)
+// ĐỔI TÊN HÀM: Khớp với mqtt_network.c
+void update_lcd_direction(uint8_t dir) {
+    if (lcdQueue != NULL) {
         direction_t d = (direction_t)dir;
         // Đẩy vào queue để task LCD nhận (không đợi nếu queue đầy)
-        xQueueSend(ledQueue, &d, 0); 
+        xQueueSend(lcdQueue, &d, 0); 
     }
 }
 
@@ -84,8 +84,9 @@ void task_mqtt_process(void *pvParameters) {
     }
 }
 
-// 3. Task LED Matrix 8x8 / LCD (Tối ưu tiết kiệm pin triệt để)
-void task_led_matrix(void *pvParameters) {
+// 3. Task LCD TFT 2.2 inch (Tối ưu tiết kiệm pin triệt để)
+// ĐỔI TÊN TASK: task_led_matrix -> task_lcd_display
+void task_lcd_display(void *pvParameters) {
     direction_t current_dir = DIR_OFF;
     
     // Vừa vào task, cho LCD ngủ đông ngay lập tức để tiết kiệm điện
@@ -94,17 +95,16 @@ void task_led_matrix(void *pvParameters) {
     while(1) {
         direction_t new_dir;
         // Dùng portMAX_DELAY: Task sẽ NGỦ KỸ TRONG OS (0% CPU) tới khi có lệnh từ MQTT
-        if (xQueueReceive(ledQueue, &new_dir, portMAX_DELAY)) {
+        if (xQueueReceive(lcdQueue, &new_dir, portMAX_DELAY)) {
             if (new_dir != current_dir) {
                 // Chỉ đánh thức/cập nhật LCD khi hướng thực sự thay đổi
                 tft_display_direction(new_dir);
                 current_dir = new_dir;
-                ESP_LOGI(TAG, "LCD/LED Updated DIR: %d", new_dir);
+                ESP_LOGI(TAG, "LCD Updated DIR: %d", new_dir);
             }
         }
     }
 }
-
 
 void app_main(void)
 {
@@ -147,10 +147,10 @@ void app_main(void)
 
     // Khởi tạo Queue
     sensorQueue = xQueueCreate(10, sizeof(SensorData_t));
-    ledQueue = xQueueCreate(5, sizeof(direction_t));
+    lcdQueue = xQueueCreate(5, sizeof(direction_t)); // ĐỔI TÊN KHỞI TẠO QUEUE
 
     // Phân nhỏ luồng bằng FreeRTOS
-    xTaskCreate(task_led_matrix, "led_task", 2048, NULL, 5, NULL);     
+    xTaskCreate(task_lcd_display, "lcd_task", 2048, NULL, 5, NULL);     // ĐỔI TÊN TASK
     xTaskCreate(task_mqtt_process, "mqtt_task", 4096, NULL, 4, NULL);   
     xTaskCreate(task_read_sensors, "sensor_task", 4096, NULL, 3, NULL); 
 
