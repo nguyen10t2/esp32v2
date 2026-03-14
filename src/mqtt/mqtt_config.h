@@ -1,7 +1,7 @@
 #ifndef MQTT_CONFIG_H
 #define MQTT_CONFIG_H
 
-#define MQTT_BROKER     "192.168.1.11" // Thay bằng địa chỉ IP máy tính đang chạy backend/broker
+#define MQTT_BROKER     "f5.soict.io" // Thay bằng địa chỉ IP máy tính đang chạy backend/broker
 #define MQTT_PORT       1883
 
 #define NODE_ID         1

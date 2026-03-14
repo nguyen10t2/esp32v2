@@ -12,6 +12,7 @@
 #include "sensor/flame.h"
 #include "sensor/ds18b20.h"
 #include "mqtt/f5_mqtt.h"
+#include "lcd/tft.h"
 // #include "mqtt/f5_mqtt.h" // TODO: Include MQTT header
 // #include "led_matrix.h"   // TODO: Include LED header
 
@@ -76,9 +77,16 @@ void task_mqtt_process(void *pvParameters) {
 
 // 3. Task LED Matrix 8x8 (Cập nhật cực nhanh, chớp nháy mượt mà)
 void task_led_matrix(void *pvParameters) {
+    tft_fill_screen(TFT_COLOR_BLACK);
+    tft_draw_string(10, 10, "FIRE NODE: ONLINE", TFT_COLOR_GREEN);
+    
+    int frame_cnt = 0;
+    char buf[32];
+
     while(1) {
-        // Hàm quét LED Matrix
-        // led_matrix_scan();
+        // Cập nhật số đếm liên tục lên màn hình
+        snprintf(buf, sizeof(buf), "Frames: %d  ", frame_cnt++);
+        tft_draw_string(10, 40, buf, TFT_COLOR_WHITE);
         
         // Render 20fps -> độ trễ 50ms, không bị giật
         vTaskDelay(pdMS_TO_TICKS(50));
@@ -108,7 +116,7 @@ void app_main(void)
     set_time_zone();
     while (!wait_for_time_sync()) {
         ESP_LOGW(TAG, "Time sync failed, retrying...");
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
     // Mạng có rồi mới được gọi f5_mqtt_init
@@ -117,6 +125,13 @@ void app_main(void)
     mq_sensor_init();
     flame_sensor_init();
     ds18b20_init();
+    
+    // Khởi tạo và thiết lập màn hình LCD
+    if (tft_init() == ESP_OK) {
+        ESP_LOGI(TAG, "TFT 2.2\" khởi tạo THÀNH CÔNG");
+    } else {
+        ESP_LOGE(TAG, "TFT 2.2\" khởi tạo THẤT BẠI");
+    }
 
     // Khởi tạo Queue với kích thước 10 packet
     sensorQueue = xQueueCreate(10, sizeof(SensorData_t));
