@@ -4,6 +4,7 @@
 #include "mqtt_client.h"
 #include <stdio.h>
 #include "cJSON.h"
+#include "buzzer.h"
 
 static const char *TAG = "F5_NETWORK";
 
@@ -50,8 +51,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     bool buzzer_state = cJSON_IsTrue(buzzer_item);
                     ESP_LOGW(TAG, "=> LỆNH XUỐNG: CÒI HÚ = %s", buzzer_state ? "BAT" : "TAT");
                     
-                    // TODO: Tương lai bạn sẽ gọi hàm phần cứng bật/tắt còi ở đây
-                    // Ví dụ: hardware_buzzer_set(buzzer_state);
+                    cJSON *buzzer_item = cJSON_GetObjectItem(root, "buzzer");
+                    if (cJSON_IsBool(buzzer_item)) {
+                        bool buzzer_state = cJSON_IsTrue(buzzer_item);
+                        // Gọi hàm thực thi phần cứng Còi
+                        buzzer_set_state(buzzer_state); 
+                    }
                 }
 
                 // --- XỬ LÝ LỆNH 2: HƯỚNG SƠ TÁN (dir) ---
