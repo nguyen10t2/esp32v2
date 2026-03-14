@@ -3,6 +3,7 @@
 #include "esp_log.h"
 #include "mqtt_client.h"
 #include <stdio.h>
+#include "cJSON.h"
 
 static const char *TAG = "F5_NETWORK";
 
