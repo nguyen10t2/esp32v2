@@ -3,8 +3,10 @@
 #include "esp_log.h"
 #include "mqtt_client.h"
 #include <stdio.h>
+#include <string.h> 
 #include "cJSON.h"
 #include "buzzer.h"
+#include "led_matrix.h"
 
 static const char *TAG = "F5_NETWORK";
 
@@ -29,15 +31,17 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             is_connected = false;
             break;
             
+        // ĐÃ GỘP THÀNH 1 CASE DUY NHẤT
         case MQTT_EVENT_DATA:
-            ESP_LOGI(TAG, "Nhan lenh dieu khien tu Topic: %.*s", event->topic_len, event->topic);
+            ESP_LOGI(TAG, "Nhan lenh tu Server o Topic: %.*s", event->topic_len, event->topic);
             ESP_LOGI(TAG, "Noi dung lenh: %.*s", event->data_len, event->data);
-
-            case MQTT_EVENT_DATA:
-            ESP_LOGI(TAG, "Nhan lenh tu Server ở Topic: %.*s", event->topic_len, event->topic);
 
             // 1. Copy payload nhận được ra một chuỗi string chuẩn C (có ký tự '\0' ở cuối)
             char *json_str = malloc(event->data_len + 1);
+            if (json_str == NULL) {
+                ESP_LOGE(TAG, "Loi cap phat bo nho RAM");
+                break;
+            }
             memcpy(json_str, event->data, event->data_len);
             json_str[event->data_len] = '\0';
 
@@ -51,12 +55,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                     bool buzzer_state = cJSON_IsTrue(buzzer_item);
                     ESP_LOGW(TAG, "=> LỆNH XUỐNG: CÒI HÚ = %s", buzzer_state ? "BAT" : "TAT");
                     
-                    cJSON *buzzer_item = cJSON_GetObjectItem(root, "buzzer");
-                    if (cJSON_IsBool(buzzer_item)) {
-                        bool buzzer_state = cJSON_IsTrue(buzzer_item);
-                        // Gọi hàm thực thi phần cứng Còi
-                        buzzer_set_state(buzzer_state); 
-                    }
+                    // Gọi hàm thực thi phần cứng Còi
+                    buzzer_set_state(buzzer_state); 
                 }
 
                 // --- XỬ LÝ LỆNH 2: HƯỚNG SƠ TÁN (dir) ---
@@ -64,8 +64,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 if (cJSON_IsString(dir_item) && (dir_item->valuestring != NULL)) {
                     ESP_LOGW(TAG, "=> LỆNH XUỐNG: LED MATRIX = HƯỚNG %s", dir_item->valuestring);
                     
-                    // TODO: Tương lai bạn sẽ gọi hàm phần cứng vẽ LED ở đây
-                    // Ví dụ: hardware_led_matrix_draw(dir_item->valuestring);
+                    // Gọi hàm thực thi phần cứng LED
+                    led_matrix_draw_direction(dir_item->valuestring);
                 }
 
                 // Xóa object JSON sau khi dùng xong để tránh tràn RAM
