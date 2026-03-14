@@ -32,8 +32,45 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             ESP_LOGI(TAG, "Nhan lenh dieu khien tu Topic: %.*s", event->topic_len, event->topic);
             ESP_LOGI(TAG, "Noi dung lenh: %.*s", event->data_len, event->data);
 
-            //CODE LED
+            case MQTT_EVENT_DATA:
+            ESP_LOGI(TAG, "Nhan lenh tu Server ở Topic: %.*s", event->topic_len, event->topic);
 
+            // 1. Copy payload nhận được ra một chuỗi string chuẩn C (có ký tự '\0' ở cuối)
+            char *json_str = malloc(event->data_len + 1);
+            memcpy(json_str, event->data, event->data_len);
+            json_str[event->data_len] = '\0';
+
+            // 2. Dùng cJSON mổ xẻ cái chuỗi vừa nhận
+            cJSON *root = cJSON_Parse(json_str);
+            if (root != NULL) {
+                
+                // --- XỬ LÝ LỆNH 1: CÒI HÚ (buzzer) ---
+                cJSON *buzzer_item = cJSON_GetObjectItem(root, "buzzer");
+                if (cJSON_IsBool(buzzer_item)) {
+                    bool buzzer_state = cJSON_IsTrue(buzzer_item);
+                    ESP_LOGW(TAG, "=> LỆNH XUỐNG: CÒI HÚ = %s", buzzer_state ? "BAT" : "TAT");
+                    
+                    // TODO: Tương lai bạn sẽ gọi hàm phần cứng bật/tắt còi ở đây
+                    // Ví dụ: hardware_buzzer_set(buzzer_state);
+                }
+
+                // --- XỬ LÝ LỆNH 2: HƯỚNG SƠ TÁN (dir) ---
+                cJSON *dir_item = cJSON_GetObjectItem(root, "dir");
+                if (cJSON_IsString(dir_item) && (dir_item->valuestring != NULL)) {
+                    ESP_LOGW(TAG, "=> LỆNH XUỐNG: LED MATRIX = HƯỚNG %s", dir_item->valuestring);
+                    
+                    // TODO: Tương lai bạn sẽ gọi hàm phần cứng vẽ LED ở đây
+                    // Ví dụ: hardware_led_matrix_draw(dir_item->valuestring);
+                }
+
+                // Xóa object JSON sau khi dùng xong để tránh tràn RAM
+                cJSON_Delete(root); 
+            } else {
+                ESP_LOGE(TAG, "Lỗi: Payload tải xuống không phải là JSON hợp lệ!");
+            }
+            
+            // Xóa chuỗi string mượn tạm lúc nãy
+            free(json_str); 
             break;
             
         case MQTT_EVENT_ERROR:
