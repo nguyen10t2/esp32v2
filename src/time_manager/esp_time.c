@@ -1,5 +1,6 @@
-#include "esp_log.h"
 #include "esp_time.h"
+
+#include "esp_log.h"
 
 static const char *TAG = "ESP_TIME_INIT";
 
@@ -12,7 +13,7 @@ void init_sntp(void) {
 }
 
 void set_time_zone(void) {
-    //Cấu hình múi giờ Việt Nam (GMT+7)
+    // Cấu hình múi giờ Việt Nam (GMT+7)
     setenv("TZ", "GMT-7", 1);
     tzset();
 }
@@ -24,7 +25,7 @@ bool wait_for_time_sync(void) {
         ESP_LOGI(TAG, "Đang chờ đồng bộ... (%d/%d)", retry, retry_count);
         vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
-    
+
     if (retry >= retry_count) {
         ESP_LOGE(TAG, "Không thể đồng bộ thời gian sau %d lần thử.", retry_count);
         return false;

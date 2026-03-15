@@ -1,37 +1,40 @@
 #include "mqtt_network.h"
-#include "mqtt_config.h"
+
+#include <stdio.h>
+#include <string.h>
+
+#include "cJSON.h"
 #include "esp_log.h"
 #include "mqtt_client.h"
-#include <stdio.h>
-#include <string.h> 
-#include "cJSON.h"
+#include "mqtt_config.h"
 
 // Hàm trung gian đẩy data sang Task điều khiển màn hình (viết ở main.c)
-extern void update_lcd_direction(uint8_t dir); 
+extern void update_lcd_direction(uint8_t dir);
 
 static const char *TAG = "F5_NETWORK";
 
 static esp_mqtt_client_handle_t client = NULL;
 static bool is_connected = false;
 
-//Xử lý sự kiện
-static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
+// Xử lý sự kiện
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id,
+                               void *event_data) {
     esp_mqtt_event_handle_t event = event_data;
-    
+
     switch ((esp_mqtt_event_id_t)event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "Ket noi thanh cong den Broker: %s", MQTT_BROKER);
             is_connected = true;
-            
+
             // Đăng ký lắng nghe lệnh từ Server cho TẤT CẢ các node (dùng Wildcard +)
             esp_mqtt_client_subscribe(client, "esp32/cmd/+", 0);
             break;
-            
+
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGW(TAG, "Mat ket noi MQTT! Dang tu dong thu lai...");
             is_connected = false;
             break;
-            
+
         case MQTT_EVENT_DATA:
             ESP_LOGI(TAG, "=> Nhan lenh tu Topic: %.*s", event->topic_len, event->topic);
 
@@ -47,15 +50,14 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
             // 2. Mổ xẻ JSON
             cJSON *root = cJSON_Parse(json_str);
             if (root != NULL) {
-                
                 // --- XỬ LÝ LỆNH: HƯỚNG SƠ TÁN (dir) ---
                 cJSON *dir_item = cJSON_GetObjectItem(root, "dir");
-                
+
                 // Kiểm tra xem backend có gửi đúng định dạng số (0-4) không
                 if (cJSON_IsNumber(dir_item)) {
                     int dir_value = dir_item->valueint;
                     ESP_LOGW(TAG, "-> LENH XUONG: TFT LCD = HUONG (ID: %d)", dir_value);
-                    
+
                     // Bắn tín hiệu sang cho Task màn hình xử lý
                     update_lcd_direction((uint8_t)dir_value);
                 } else {
@@ -63,18 +65,18 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
                 }
 
                 // Dọn dẹp RAM
-                cJSON_Delete(root); 
+                cJSON_Delete(root);
             } else {
                 ESP_LOGE(TAG, "Loi: Payload khong dung chuan JSON!");
             }
-            
-            free(json_str); 
+
+            free(json_str);
             break;
-            
+
         case MQTT_EVENT_ERROR:
             ESP_LOGE(TAG, "Lỗi MQTT Client!");
             break;
-            
+
         default:
             break;
     }

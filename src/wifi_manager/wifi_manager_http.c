@@ -1,27 +1,26 @@
+#include "wifi_manager_http.h"
+
 #include <string.h>
+
+#include "cJSON.h"
+#include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
-#include "esp_http_server.h"
-#include "cJSON.h"
-
 #include "portal_html.h"
-#include "wifi_manager_http.h"
 #include "wifi_manager.h"
 
 static const char *TAG = "WM_HTTP";
 static httpd_handle_t s_server = NULL;
 
 /* ── GET / — Phục vụ trang HTML captive portal ── */
-static esp_err_t root_get_handler(httpd_req_t *req)
-{
+static esp_err_t root_get_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "text/html");
     httpd_resp_send(req, WIFI_PORTAL_HTML, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
 /* ── GET /scan — Quét và trả danh sách Wi-Fi dạng JSON ── */
-static esp_err_t scan_get_handler(httpd_req_t *req)
-{
+static esp_err_t scan_get_handler(httpd_req_t *req) {
     /* Quét Wi-Fi (blocking) */
     wifi_scan_config_t scan_cfg = {
         .show_hidden = false,
@@ -30,7 +29,8 @@ static esp_err_t scan_get_handler(httpd_req_t *req)
 
     uint16_t ap_count = 0;
     esp_wifi_scan_get_ap_num(&ap_count);
-    if (ap_count > 20) ap_count = 20; /* giới hạn */
+    if (ap_count > 20)
+        ap_count = 20; /* giới hạn */
 
     wifi_ap_record_t *ap_records = calloc(ap_count, sizeof(wifi_ap_record_t));
     esp_wifi_scan_get_ap_records(&ap_count, ap_records);
@@ -56,12 +56,11 @@ static esp_err_t scan_get_handler(httpd_req_t *req)
 }
 
 /* ── Hàm helper: URL-decode ── */
-static void url_decode(char *dst, const char *src, size_t dst_size)
-{
+static void url_decode(char *dst, const char *src, size_t dst_size) {
     size_t di = 0;
     for (size_t si = 0; src[si] && di < dst_size - 1; si++) {
         if (src[si] == '%' && src[si + 1] && src[si + 2]) {
-            char hex[3] = { src[si + 1], src[si + 2], 0 };
+            char hex[3] = {src[si + 1], src[si + 2], 0};
             dst[di++] = (char)strtol(hex, NULL, 16);
             si += 2;
         } else if (src[si] == '+') {
@@ -74,8 +73,7 @@ static void url_decode(char *dst, const char *src, size_t dst_size)
 }
 
 /* ── Hàm helper: lấy giá trị param từ body URL-encoded ── */
-static bool get_form_param(const char *body, const char *key, char *out, size_t out_size)
-{
+static bool get_form_param(const char *body, const char *key, char *out, size_t out_size) {
     size_t key_len = strlen(key);
     const char *p = body;
     while ((p = strstr(p, key)) != NULL) {
@@ -102,8 +100,7 @@ static bool get_form_param(const char *body, const char *key, char *out, size_t 
 }
 
 /* ── POST /connect — Nhận SSID & password, thực hiện kết nối ── */
-static esp_err_t connect_post_handler(httpd_req_t *req)
-{
+static esp_err_t connect_post_handler(httpd_req_t *req) {
     char body[256] = {0};
     int received = httpd_req_recv(req, body, sizeof(body) - 1);
     if (received <= 0) {
@@ -157,8 +154,7 @@ static esp_err_t connect_post_handler(httpd_req_t *req)
 }
 
 /* ── Khởi động HTTP server ── */
-esp_err_t wifi_manager_http_start(void)
-{
+esp_err_t wifi_manager_http_start(void) {
     if (s_server) {
         ESP_LOGW(TAG, "HTTP server đã chạy");
         return ESP_OK;
@@ -177,19 +173,19 @@ esp_err_t wifi_manager_http_start(void)
 
     /* Đăng ký các URI handler */
     const httpd_uri_t root = {
-        .uri       = "/",
-        .method    = HTTP_GET,
-        .handler   = root_get_handler,
+        .uri = "/",
+        .method = HTTP_GET,
+        .handler = root_get_handler,
     };
     const httpd_uri_t scan = {
-        .uri       = "/scan",
-        .method    = HTTP_GET,
-        .handler   = scan_get_handler,
+        .uri = "/scan",
+        .method = HTTP_GET,
+        .handler = scan_get_handler,
     };
     const httpd_uri_t connect_uri = {
-        .uri       = "/connect",
-        .method    = HTTP_POST,
-        .handler   = connect_post_handler,
+        .uri = "/connect",
+        .method = HTTP_POST,
+        .handler = connect_post_handler,
     };
 
     httpd_register_uri_handler(s_server, &root);
@@ -201,8 +197,7 @@ esp_err_t wifi_manager_http_start(void)
 }
 
 /* ── Dừng HTTP server ── */
-void wifi_manager_http_stop(void)
-{
+void wifi_manager_http_stop(void) {
     if (s_server) {
         httpd_stop(s_server);
         s_server = NULL;
