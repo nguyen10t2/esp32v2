@@ -86,6 +86,12 @@ void mqtt_network_init(void) {
 
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = broker_uri,
+        
+        // Nếu Node này mất điện/mất mạng đột ngột, Broker sẽ tự động bắn tin nhắn này đi
+        .session.last_will.topic = "esp32/status",
+        .session.last_will.msg = "{\"status\": \"OFFLINE\", \"reason\": \"connection_lost\"}",
+        .session.last_will.qos = 1,
+        .session.last_will.retain = 1 // Lưu trên server để App mở lên là thấy ngay chữ Offline
     };
 
     client = esp_mqtt_client_init(&mqtt_cfg);
